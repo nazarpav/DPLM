@@ -110,15 +110,20 @@ void ADPLMCharacter::BeginPlay()
 	transform.SetRotation(rotate.Quaternion());
 	FActorSpawnParameters spawnInfo;
 	ABlock* block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
-	for (size_t j = 0; j < 64; j++)
+	FVector w_size(200.,200.,30.);
+	FMath::RandInit(65u);
+	for (size_t j = 0; j < w_size.Y; j++)
 	{
 		pos.X =  0.f;
 		pos.Y += 100.f;
-		for (size_t i = 0; i < 64; i++)
+		for (size_t i = 0; i < w_size.X; i++)
 		{
 			pos.Z = 0.f;
 			pos.X += 100.f;
-			for (size_t h = 0; h < 64; h++)
+			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X/(i+1.f), w_size.Y/(j + 1.f)))+1.f)/2.f;
+			size_t height = static_cast<size_t>(w_size.Z * res);
+			height = FMath::Max(static_cast<unsigned int>(height), 1u);
+			for (size_t h = 0; h < height; h++)
 			{
 				transform.SetTranslation(pos);
 				block->AddInstance(transform);
@@ -126,6 +131,12 @@ void ADPLMCharacter::BeginPlay()
 			}
 		}
 	}
+	auto p_spawPos = w_size;
+	p_spawPos.X /= 2.f;
+	p_spawPos.Y /= 2.f;
+	p_spawPos.Z += 2.f;
+	p_spawPos *= 100.f;
+	SetActorLocation(p_spawPos);
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -60,7 +60,7 @@ void ADPLMProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 			else {
 				static_cast<ABlock*>(OtherActor)->DeleteInstance(pos);
 			}
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("hit pos ->: %s"), *HitComp->GetComponentLocation().ToString()));
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("hit pos ->: %s"), *HitComp->GetComponentLocation().ToString()));
 		}
 	}
 }
