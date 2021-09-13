@@ -89,11 +89,10 @@ ADPLMCharacter::ADPLMCharacter()
 void ADPLMCharacter::ConfigureBlockTest() {
 	auto&& res = GetComponentsByTag(UBoxComponent::StaticClass(), FName("mainColision"));
 	if (res.Num() > 0) {
-	UBoxComponent*  colisionComp = static_cast<UBoxComponent*>(res[0]);
-	//colisionComp->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
-	//colisionComp->SetCollisionResponseToChannel(ECC_XXX, ECollisionResponse::ECR_Overlap);
-	colisionComp->OnComponentBeginOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapBegin);
-	colisionComp->OnComponentEndOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapEnd);
+		UBoxComponent* colisionComp = static_cast<UBoxComponent*>(res[0]);
+		colisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		colisionComp->OnComponentBeginOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapBegin);
+		colisionComp->OnComponentEndOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapEnd);
 	}
 }
 
@@ -117,25 +116,26 @@ void ADPLMCharacter::BeginPlay()
 		Mesh1P->SetHiddenInGame(false, true);
 	}
 	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
-	blockMarker->SetHidden(true);
+	blockMarker->SetActorHiddenInGame(true);
+	//blockMarker->DisableComponentsSimulatePhysics();
 	ConfigureBlockTest();
-	FVector pos(0.f,0.f,0.f);
+	FVector pos(0.f, 0.f, 0.f);
 	FRotator rotate(0.f, 0.f, 0.f);
 	FTransform transform;
 	transform.SetRotation(rotate.Quaternion());
 	FActorSpawnParameters spawnInfo;
 	ABlock* block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
-	FVector w_size(200.,200.,30.);
+	FVector w_size(20., 20., 30.);
 	FMath::RandInit(65u);
 	for (size_t j = 0; j < w_size.Y; j++)
 	{
-		pos.X =  0.f;
+		pos.X = 0.f;
 		pos.Y += 100.f;
 		for (size_t i = 0; i < w_size.X; i++)
 		{
 			pos.Z = 0.f;
 			pos.X += 100.f;
-			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X/(i+1.f), w_size.Y/(j + 1.f)))+1.f)/2.f;
+			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 2.f;
 			size_t height = static_cast<size_t>(w_size.Z * res);
 			height = FMath::Max(static_cast<unsigned int>(height), 1u);
 			for (size_t h = 0; h < height; h++)
@@ -176,6 +176,7 @@ void ADPLMCharacter::BeginPlay()
 	p_spawPos.Z += 2.f;
 	p_spawPos *= 100.f;
 	SetActorLocation(p_spawPos);
+	SelectedOtherBodyIndex = -1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -212,72 +213,50 @@ void ADPLMCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInpu
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ADPLMCharacter::LookUpAtRate);
 }
 
-	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(OtherBodyIndex));
+//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(OtherBodyIndex));
 void ADPLMCharacter::OnBlockTestOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (OtherActor->ActorHasTag("block")) {
-		static_cast<ABlock*>(OtherActor)->SelectInstance(OtherBodyIndex);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(00));
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, static_cast<ABlock*>(OtherActor)->GetTransform(OtherBodyIndex).GetLocation().ToString());
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, SweepResult.Location.ToString());
-		blockMarker->SetActorLocation(SweepResult.Location);
-		blockMarker->SetHidden(false);
+		SelectedOtherBodyIndex = OtherBodyIndex;
+		SelectedActor = OtherActor;
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, SweepResult.Location.ToString());
+		//static_cast<ABlock*>(OtherActor)->DeleteInstance(OtherBodyIndex);
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::FromInt(1));
+		blockMarker->SetActorLocation(static_cast<ABlock*>(OtherActor)->GetInstanceLocation(OtherBodyIndex));
+		blockMarker->SetActorHiddenInGame(false);
 	}
 }
 
 void ADPLMCharacter::OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (OtherActor->ActorHasTag("block")) {
-		static_cast<ABlock*>(OtherActor)->DeselectInstance(OtherBodyIndex);
-		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::FromInt(00));
-		blockMarker->SetHidden(true);
-
+		//static_cast<ABlock*>(OtherActor)->DeselectInstance(OtherBodyIndex);
+		if (OtherBodyIndex == SelectedOtherBodyIndex) {
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::FromInt(0));
+		blockMarker->SetActorHiddenInGame(true);
+		SelectedOtherBodyIndex = -1;
+		SelectedActor = nullptr;
+		}
 	}
 }
 
 void ADPLMCharacter::OnFire()
 {
-	// try and fire a projectile
-	if (ProjectileClass != nullptr)
-	{
-		UWorld* const World = GetWorld();
-		if (World != nullptr)
-		{
-			if (bUsingMotionControllers)
-			{
-				const FRotator SpawnRotation = VR_MuzzleLocation->GetComponentRotation();
-				const FVector SpawnLocation = VR_MuzzleLocation->GetComponentLocation();
-				World->SpawnActor<ADPLMProjectile>(ProjectileClass, SpawnLocation, SpawnRotation);
-			}
-			else
-			{
-				const FRotator SpawnRotation = GetControlRotation();
-				// MuzzleOffset is in camera space, so transform it to world space before offsetting from the character location to find the final muzzle position
-				const FVector SpawnLocation = ((FP_MuzzleLocation != nullptr) ? FP_MuzzleLocation->GetComponentLocation() : GetActorLocation()) + SpawnRotation.RotateVector(GunOffset);
-
-				//Set Spawn Collision Handling Override
-				FActorSpawnParameters ActorSpawnParams;
-				ActorSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
-
-				// spawn the projectile at the muzzle
-				auto res = World->SpawnActor<ADPLMProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, ActorSpawnParams);
-				if (res) {
-					res->SetIsRestored(false);
-				}
-			}
+	UWorld* const World = GetWorld();
+	if (World != nullptr){
+		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
+			static_cast<ABlock*>(SelectedActor)->DeleteInstance(SelectedOtherBodyIndex);
+			blockMarker->SetActorHiddenInGame(true);
+			SelectedOtherBodyIndex = -1;
+			SelectedActor = nullptr;
 		}
 	}
-
-	// try and play the sound if specified
 	if (FireSound != nullptr)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
 	}
-
-	// try and play a firing animation if specified
 	if (FireAnimation != nullptr)
 	{
-		// Get the animation object for the arms mesh
 		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
 		if (AnimInstance != nullptr)
 		{
@@ -288,47 +267,21 @@ void ADPLMCharacter::OnFire()
 
 void ADPLMCharacter::OnRestore()
 {
-	// try and fire a projectile
-	if (ProjectileClass != nullptr)
-	{
-		UWorld* const World = GetWorld();
-		if (World != nullptr)
-		{
-			if (bUsingMotionControllers)
-			{
-				const FRotator SpawnRotation = VR_MuzzleLocation->GetComponentRotation();
-				const FVector SpawnLocation = VR_MuzzleLocation->GetComponentLocation();
-				World->SpawnActor<ADPLMProjectile>(ProjectileClass, SpawnLocation, SpawnRotation);
-			}
-			else
-			{
-				const FRotator SpawnRotation = GetControlRotation();
-				// MuzzleOffset is in camera space, so transform it to world space before offsetting from the character location to find the final muzzle position
-				const FVector SpawnLocation = ((FP_MuzzleLocation != nullptr) ? FP_MuzzleLocation->GetComponentLocation() : GetActorLocation()) + SpawnRotation.RotateVector(GunOffset);
-
-				//Set Spawn Collision Handling Override
-				FActorSpawnParameters ActorSpawnParams;
-				ActorSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
-
-				// spawn the projectile at the muzzle
-				auto res = World->SpawnActor<ADPLMProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, ActorSpawnParams);
-				if (res) {
-					res->SetIsRestored(true);
-				}
-			}
+	UWorld* const World = GetWorld();
+	if (World != nullptr) {
+		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
+			static_cast<ABlock*>(SelectedActor)->DeleteInstance(SelectedOtherBodyIndex);
+			blockMarker->SetHidden(true);
+			SelectedOtherBodyIndex = -1;
+			SelectedActor = nullptr;
 		}
 	}
-
-	// try and play the sound if specified
 	if (FireSound != nullptr)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
 	}
-
-	// try and play a firing animation if specified
 	if (FireAnimation != nullptr)
 	{
-		// Get the animation object for the arms mesh
 		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
 		if (AnimInstance != nullptr)
 		{
@@ -446,6 +399,6 @@ bool ADPLMCharacter::EnableTouchscreenMovement(class UInputComponent* PlayerInpu
 		//PlayerInputComponent->BindTouch(EInputEvent::IE_Repeat, this, &ADPLMCharacter::TouchUpdate);
 		return true;
 	}
-	
+
 	return false;
 }

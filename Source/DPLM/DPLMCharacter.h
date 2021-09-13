@@ -102,6 +102,8 @@ public:
 		void OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 protected:
+	AActor* SelectedActor;
+	int32 SelectedOtherBodyIndex;
 	ABlockSelectMarker* blockMarker;
 	/** Fires a projectile. */
 	void OnFire();
