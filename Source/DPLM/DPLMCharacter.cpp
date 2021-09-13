@@ -11,6 +11,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "MotionControllerComponent.h"
 #include "Block.h"
+#include "Components/BoxComponent.h"
+
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
 
 DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
@@ -84,6 +86,16 @@ ADPLMCharacter::ADPLMCharacter()
 	// Uncomment the following line to turn motion controllers on by default:
 	//bUsingMotionControllers = true;
 }
+void ADPLMCharacter::ConfigureBlockTest() {
+	auto&& res = GetComponentsByTag(UBoxComponent::StaticClass(), FName("mainColision"));
+	if (res.Num() > 0) {
+	UBoxComponent*  colisionComp = static_cast<UBoxComponent*>(res[0]);
+	//colisionComp->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	//colisionComp->SetCollisionResponseToChannel(ECC_XXX, ECollisionResponse::ECR_Overlap);
+	colisionComp->OnComponentBeginOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapBegin);
+	colisionComp->OnComponentEndOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapEnd);
+	}
+}
 
 void ADPLMCharacter::BeginPlay()
 {
@@ -104,6 +116,9 @@ void ADPLMCharacter::BeginPlay()
 		VR_Gun->SetHiddenInGame(true, true);
 		Mesh1P->SetHiddenInGame(false, true);
 	}
+	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
+	blockMarker->SetHidden(true);
+	ConfigureBlockTest();
 	FVector pos(0.f,0.f,0.f);
 	FRotator rotate(0.f, 0.f, 0.f);
 	FTransform transform;
@@ -131,6 +146,30 @@ void ADPLMCharacter::BeginPlay()
 			}
 		}
 	}
+	/*pos = FVector(0.f, 0.f, 0.f);
+	pos.X = (w_size.X+1.f)*100.f;
+
+	block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
+	FMath::RandInit(66u);
+	for (size_t j = 0; j < w_size.Y; j++)
+	{
+		pos.X = 0.f;
+		pos.Y += 100.f;
+		for (size_t i = 0; i < w_size.X; i++)
+		{
+			pos.Z = 0.f;
+			pos.X += 100.f;
+			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 2.f;
+			size_t height = static_cast<size_t>(w_size.Z * res);
+			height = FMath::Max(static_cast<unsigned int>(height), 1u);
+			for (size_t h = 0; h < height; h++)
+			{
+				transform.SetTranslation(pos);
+				block->AddInstance(transform);
+				pos.Z += 100.f;
+			}
+		}
+	}*/
 	auto p_spawPos = w_size;
 	p_spawPos.X /= 2.f;
 	p_spawPos.Y /= 2.f;
@@ -171,6 +210,29 @@ void ADPLMCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInpu
 	PlayerInputComponent->BindAxis("TurnRate", this, &ADPLMCharacter::TurnAtRate);
 	PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ADPLMCharacter::LookUpAtRate);
+}
+
+	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(OtherBodyIndex));
+void ADPLMCharacter::OnBlockTestOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (OtherActor->ActorHasTag("block")) {
+		static_cast<ABlock*>(OtherActor)->SelectInstance(OtherBodyIndex);
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(00));
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, static_cast<ABlock*>(OtherActor)->GetTransform(OtherBodyIndex).GetLocation().ToString());
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, SweepResult.Location.ToString());
+		blockMarker->SetActorLocation(SweepResult.Location);
+		blockMarker->SetHidden(false);
+	}
+}
+
+void ADPLMCharacter::OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (OtherActor->ActorHasTag("block")) {
+		static_cast<ABlock*>(OtherActor)->DeselectInstance(OtherBodyIndex);
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::FromInt(00));
+		blockMarker->SetHidden(true);
+
+	}
 }
 
 void ADPLMCharacter::OnFire()

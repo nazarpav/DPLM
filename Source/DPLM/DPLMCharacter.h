@@ -4,8 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include <DPLM/BlockSelectMarker.h>
 #include "DPLMCharacter.generated.h"
 
+//class BoxComponent;
 class UInputComponent;
 class USkeletalMeshComponent;
 class USceneComponent;
@@ -51,25 +53,31 @@ class ADPLMCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	UMotionControllerComponent* L_MotionController;
 
+	
 public:
 	ADPLMCharacter();
 
+
 protected:
 	virtual void BeginPlay();
+	void ConfigureBlockTest();
 
 public:
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseTurnRate;
-
+	
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseLookUpRate;
 
+	/*UPROPERTY(EditAnywhere)
+	UBoxComponent* mainColisionComponent;*/
+
 	/** Gun muzzle's offset from the characters location */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
 	FVector GunOffset;
-
+	//UPROPERTY(VisibleDefaultsOnly)
 	/** Projectile class to spawn */
 	UPROPERTY(EditDefaultsOnly, Category=Projectile)
 	TSubclassOf<class ADPLMProjectile> ProjectileClass;
@@ -86,8 +94,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	uint8 bUsingMotionControllers : 1;
 
-protected:
+
+	UFUNCTION()
+		void OnBlockTestOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+		void OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
+protected:
+	ABlockSelectMarker* blockMarker;
 	/** Fires a projectile. */
 	void OnFire();
 

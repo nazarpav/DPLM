@@ -18,4 +18,8 @@ public:
 		ABlock();
 		void AddInstance(FTransform pos);
 		void DeleteInstance(FVector pos);
+		void DeleteInstance(int32 index);
+		void SelectInstance(int32 index);
+		void DeselectInstance(int32 index);
+		FTransform GetTransform(int32 index);
 };
