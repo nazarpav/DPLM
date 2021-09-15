@@ -5,6 +5,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include <DPLM/BlockSelectMarker.h>
+#include "Components/BoxComponent.h"
+#include "Block.h"
+
+
+
 #include "DPLMCharacter.generated.h"
 
 //class BoxComponent;
@@ -20,69 +25,25 @@ UCLASS(config=Game)
 class ADPLMCharacter : public ACharacter
 {
 	GENERATED_BODY()
-
-	/** Pawn mesh: 1st person view (arms; seen only by self) */
-	UPROPERTY(VisibleDefaultsOnly, Category=Mesh)
-	USkeletalMeshComponent* Mesh1P;
-
-	/** Gun mesh: 1st person view (seen only by self) */
-	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
-	USkeletalMeshComponent* FP_Gun;
-
-	/** Location on gun mesh where projectiles should spawn. */
 	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
 	USceneComponent* FP_MuzzleLocation;
-
-	/** Gun mesh: VR view (attached to the VR controller directly, no arm, just the actual gun) */
-	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
-	USkeletalMeshComponent* VR_Gun;
-
-	/** Location on VR gun mesh where projectiles should spawn. */
-	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
-	USceneComponent* VR_MuzzleLocation;
-
-	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
-
-	/** Motion controller (right hand) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	UMotionControllerComponent* R_MotionController;
-
-	/** Motion controller (left hand) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	UMotionControllerComponent* L_MotionController;
-
 	
 public:
 	ADPLMCharacter();
 
 
 protected:
+	enum class BlockRayCastState {
+		MISS,
+		ENTER,
+		EXIT
+	};
 	virtual void BeginPlay();
 	void ConfigureBlockTest();
-
+	//UBoxComponent* colisionComp;
 public:
-	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
-	float BaseTurnRate;
-	
-	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
-	float BaseLookUpRate;
-
-	/*UPROPERTY(EditAnywhere)
-	UBoxComponent* mainColisionComponent;*/
-
-	/** Gun muzzle's offset from the characters location */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
-	FVector GunOffset;
-	//UPROPERTY(VisibleDefaultsOnly)
-	/** Projectile class to spawn */
-	UPROPERTY(EditDefaultsOnly, Category=Projectile)
-	TSubclassOf<class ADPLMProjectile> ProjectileClass;
-
-	/** Sound to play each time we fire */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
 	USoundBase* FireSound;
 
@@ -93,75 +54,37 @@ public:
 	/** Whether to use motion controller location for aiming. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	uint8 bUsingMotionControllers : 1;
-
-
-	UFUNCTION()
-		void OnBlockTestOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-	UFUNCTION()
-		void OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-	
 protected:
-	AActor* SelectedActor;
+	FVector lastBlockSelectedSide;
+	FVector newBlockPos;
+	UCameraComponent* mainCamera;
+	FCollisionQueryParams collisionParam;
+	FHitResult OutHit;
+	ABlock* SelectedActor;
 	int32 SelectedOtherBodyIndex;
 	ABlockSelectMarker* blockMarker;
 	/** Fires a projectile. */
 	void OnFire();
 
+	void Tick(float DeltaTime)override;
+
+	BlockRayCastState BlockRayCast();
+
 	void OnRestore();
 
-	/** Resets HMD orientation and position in VR. */
-	void OnResetVR();
-
-	/** Handles moving forward/backward */
 	void MoveForward(float Val);
 
 	/** Handles stafing movement, left and right */
 	void MoveRight(float Val);
 
-	/**
-	 * Called via input to turn at a given rate.
-	 * @param Rate	This is a normalized rate, i.e. 1.0 means 100% of desired turn rate
-	 */
 	void TurnAtRate(float Rate);
 
-	/**
-	 * Called via input to turn look up/down at a given rate.
-	 * @param Rate	This is a normalized rate, i.e. 1.0 means 100% of desired turn rate
-	 */
 	void LookUpAtRate(float Rate);
-
-	struct TouchData
-	{
-		TouchData() { bIsPressed = false;Location=FVector::ZeroVector;}
-		bool bIsPressed;
-		ETouchIndex::Type FingerIndex;
-		FVector Location;
-		bool bMoved;
-	};
-	void BeginTouch(const ETouchIndex::Type FingerIndex, const FVector Location);
-	void EndTouch(const ETouchIndex::Type FingerIndex, const FVector Location);
-	void TouchUpdate(const ETouchIndex::Type FingerIndex, const FVector Location);
-	TouchData	TouchItem;
-	
 protected:
-	// APawn interface
 	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
-	// End of APawn interface
-
-	/* 
-	 * Configures input for touchscreen devices if there is a valid touch interface for doing so 
-	 *
-	 * @param	InputComponent	The input component pointer to bind controls to
-	 * @returns true if touch controls were enabled.
-	 */
 	bool EnableTouchscreenMovement(UInputComponent* InputComponent);
 
 public:
-	/** Returns Mesh1P subobject **/
-	USkeletalMeshComponent* GetMesh1P() const { return Mesh1P; }
-	/** Returns FirstPersonCameraComponent subobject **/
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
-
 };
 

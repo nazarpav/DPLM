@@ -10,8 +10,7 @@
 #include "HeadMountedDisplayFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "MotionControllerComponent.h"
-#include "Block.h"
-#include "Components/BoxComponent.h"
+#include "DrawDebugHelpers.h"
 
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
 
@@ -22,77 +21,18 @@ DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 
 ADPLMCharacter::ADPLMCharacter()
 {
-	// Set size for collision capsule
-	GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);
-
-	// set our turn rates for input
-	BaseTurnRate = 45.f;
-	BaseLookUpRate = 45.f;
-
-	// Create a CameraComponent	
+	GetCapsuleComponent()->InitCapsuleSize(40.f, 96.0f);
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(-39.56f, 1.75f, 64.f)); // Position the camera
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
-
-	// Create a mesh component that will be used when being viewed from a '1st person' view (when controlling this pawn)
-	Mesh1P = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("CharacterMesh1P"));
-	Mesh1P->SetOnlyOwnerSee(true);
-	Mesh1P->SetupAttachment(FirstPersonCameraComponent);
-	Mesh1P->bCastDynamicShadow = false;
-	Mesh1P->CastShadow = false;
-	Mesh1P->SetRelativeRotation(FRotator(1.9f, -19.19f, 5.2f));
-	Mesh1P->SetRelativeLocation(FVector(-0.5f, -4.4f, -155.7f));
-
-	// Create a gun mesh component
-	FP_Gun = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FP_Gun"));
-	FP_Gun->SetOnlyOwnerSee(false);			// otherwise won't be visible in the multiplayer
-	FP_Gun->bCastDynamicShadow = false;
-	FP_Gun->CastShadow = false;
-	// FP_Gun->SetupAttachment(Mesh1P, TEXT("GripPoint"));
-	FP_Gun->SetupAttachment(RootComponent);
-
 	FP_MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("MuzzleLocation"));
-	FP_MuzzleLocation->SetupAttachment(FP_Gun);
 	FP_MuzzleLocation->SetRelativeLocation(FVector(0.2f, 48.4f, -10.6f));
-
-	// Default offset from the character location for projectiles to spawn
-	GunOffset = FVector(100.0f, 0.0f, 10.0f);
-
-	// Note: The ProjectileClass and the skeletal mesh/anim blueprints for Mesh1P, FP_Gun, and VR_Gun 
-	// are set in the derived blueprint asset named MyCharacter to avoid direct content references in C++.
-
-	// Create VR Controllers.
-	R_MotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("R_MotionController"));
-	R_MotionController->MotionSource = FXRMotionControllerBase::RightHandSourceId;
-	R_MotionController->SetupAttachment(RootComponent);
-	L_MotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("L_MotionController"));
-	L_MotionController->SetupAttachment(RootComponent);
-
-	// Create a gun and attach it to the right-hand VR controller.
-	// Create a gun mesh component
-	VR_Gun = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("VR_Gun"));
-	VR_Gun->SetOnlyOwnerSee(false);			// otherwise won't be visible in the multiplayer
-	VR_Gun->bCastDynamicShadow = false;
-	VR_Gun->CastShadow = false;
-	VR_Gun->SetupAttachment(R_MotionController);
-	VR_Gun->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
-
-	VR_MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("VR_MuzzleLocation"));
-	VR_MuzzleLocation->SetupAttachment(VR_Gun);
-	VR_MuzzleLocation->SetRelativeLocation(FVector(0.000004, 53.999992, 10.000000));
-	VR_MuzzleLocation->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));		// Counteract the rotation of the VR gun model.
-
-	// Uncomment the following line to turn motion controllers on by default:
-	//bUsingMotionControllers = true;
 }
 void ADPLMCharacter::ConfigureBlockTest() {
-	auto&& res = GetComponentsByTag(UBoxComponent::StaticClass(), FName("mainColision"));
+	auto&& res = GetComponentsByTag(UCameraComponent::StaticClass(), FName("mainCamera"));
 	if (res.Num() > 0) {
-		UBoxComponent* colisionComp = static_cast<UBoxComponent*>(res[0]);
-		colisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		colisionComp->OnComponentBeginOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapBegin);
-		colisionComp->OnComponentEndOverlap.AddDynamic(this, &ADPLMCharacter::OnBlockTestOverlapEnd);
+		mainCamera = static_cast<UCameraComponent*>(res[0]);
 	}
 }
 
@@ -100,24 +40,10 @@ void ADPLMCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
-
-	//Attach gun mesh component to Skeleton, doing it here because the skeleton is not yet created in the constructor
-	FP_Gun->AttachToComponent(Mesh1P, FAttachmentTransformRules(EAttachmentRule::SnapToTarget, true), TEXT("GripPoint"));
-
-	// Show or hide the two versions of the gun based on whether or not we're using motion controllers.
-	if (bUsingMotionControllers)
-	{
-		VR_Gun->SetHiddenInGame(false, true);
-		Mesh1P->SetHiddenInGame(true, true);
-	}
-	else
-	{
-		VR_Gun->SetHiddenInGame(true, true);
-		Mesh1P->SetHiddenInGame(false, true);
-	}
 	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
 	blockMarker->SetActorHiddenInGame(true);
-	//blockMarker->DisableComponentsSimulatePhysics();
+	collisionParam.AddIgnoredActor(GetOwner());
+	collisionParam.AddIgnoredActor(blockMarker);
 	ConfigureBlockTest();
 	FVector pos(0.f, 0.f, 0.f);
 	FRotator rotate(0.f, 0.f, 0.f);
@@ -125,7 +51,7 @@ void ADPLMCharacter::BeginPlay()
 	transform.SetRotation(rotate.Quaternion());
 	FActorSpawnParameters spawnInfo;
 	ABlock* block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
-	FVector w_size(20., 20., 30.);
+	FVector w_size(100., 100., 30.);
 	FMath::RandInit(65u);
 	for (size_t j = 0; j < w_size.Y; j++)
 	{
@@ -135,7 +61,7 @@ void ADPLMCharacter::BeginPlay()
 		{
 			pos.Z = 0.f;
 			pos.X += 100.f;
-			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 2.f;
+			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 4.f;
 			size_t height = static_cast<size_t>(w_size.Z * res);
 			height = FMath::Max(static_cast<unsigned int>(height), 1u);
 			for (size_t h = 0; h < height; h++)
@@ -146,8 +72,8 @@ void ADPLMCharacter::BeginPlay()
 			}
 		}
 	}
-	/*pos = FVector(0.f, 0.f, 0.f);
-	pos.X = (w_size.X+1.f)*100.f;
+	pos = FVector(0.f, 0.f, 0.f);
+	pos.X = (w_size.X)*100.f;
 
 	block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
 	FMath::RandInit(66u);
@@ -169,7 +95,7 @@ void ADPLMCharacter::BeginPlay()
 				pos.Z += 100.f;
 			}
 		}
-	}*/
+	}
 	auto p_spawPos = w_size;
 	p_spawPos.X /= 2.f;
 	p_spawPos.Y /= 2.f;
@@ -184,68 +110,29 @@ void ADPLMCharacter::BeginPlay()
 
 void ADPLMCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
-	// set up gameplay key bindings
 	check(PlayerInputComponent);
 
-	// Bind jump events
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 
-	// Bind fire event
 	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &ADPLMCharacter::OnFire);
 	PlayerInputComponent->BindAction("Restore", IE_Pressed, this, &ADPLMCharacter::OnRestore);
 
-	// Enable touchscreen input
-	EnableTouchscreenMovement(PlayerInputComponent);
-
-	PlayerInputComponent->BindAction("ResetVR", IE_Pressed, this, &ADPLMCharacter::OnResetVR);
-
-	// Bind movement events
 	PlayerInputComponent->BindAxis("MoveForward", this, &ADPLMCharacter::MoveForward);
 	PlayerInputComponent->BindAxis("MoveRight", this, &ADPLMCharacter::MoveRight);
 
-	// We have 2 versions of the rotation bindings to handle different kinds of devices differently
-	// "turn" handles devices that provide an absolute delta, such as a mouse.
-	// "turnrate" is for devices that we choose to treat as a rate of change, such as an analog joystick
 	PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
 	PlayerInputComponent->BindAxis("TurnRate", this, &ADPLMCharacter::TurnAtRate);
 	PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ADPLMCharacter::LookUpAtRate);
 }
-
-//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::FromInt(OtherBodyIndex));
-void ADPLMCharacter::OnBlockTestOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{
-	if (OtherActor->ActorHasTag("block")) {
-		SelectedOtherBodyIndex = OtherBodyIndex;
-		SelectedActor = OtherActor;
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, SweepResult.Location.ToString());
-		//static_cast<ABlock*>(OtherActor)->DeleteInstance(OtherBodyIndex);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::FromInt(1));
-		blockMarker->SetActorLocation(static_cast<ABlock*>(OtherActor)->GetInstanceLocation(OtherBodyIndex));
-		blockMarker->SetActorHiddenInGame(false);
-	}
-}
-
-void ADPLMCharacter::OnBlockTestOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-	if (OtherActor->ActorHasTag("block")) {
-		//static_cast<ABlock*>(OtherActor)->DeselectInstance(OtherBodyIndex);
-		if (OtherBodyIndex == SelectedOtherBodyIndex) {
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::FromInt(0));
-		blockMarker->SetActorHiddenInGame(true);
-		SelectedOtherBodyIndex = -1;
-		SelectedActor = nullptr;
-		}
-	}
-}
-
 void ADPLMCharacter::OnFire()
 {
+	BlockRayCast();
 	UWorld* const World = GetWorld();
-	if (World != nullptr){
+	if (World != nullptr) {
 		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
-			static_cast<ABlock*>(SelectedActor)->DeleteInstance(SelectedOtherBodyIndex);
+			SelectedActor->DeleteInstance(SelectedOtherBodyIndex);
 			blockMarker->SetActorHiddenInGame(true);
 			SelectedOtherBodyIndex = -1;
 			SelectedActor = nullptr;
@@ -255,14 +142,59 @@ void ADPLMCharacter::OnFire()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
 	}
-	if (FireAnimation != nullptr)
-	{
-		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
-		if (AnimInstance != nullptr)
-		{
-			AnimInstance->Montage_Play(FireAnimation, 1.f);
+}
+
+void ADPLMCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	switch (BlockRayCast()) {
+	case BlockRayCastState::MISS:
+		if (blockMarker) {
+			blockMarker->SetActorHiddenInGame(true);
 		}
+		SelectedOtherBodyIndex = -1;
+		SelectedActor = nullptr;
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("MISS"));
+		break;
+	case BlockRayCastState::ENTER:
+		if (SelectedActor) {
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("ENTER"));
+			blockMarker->SetActorLocation(SelectedActor->GetInstanceLocation(SelectedOtherBodyIndex));
+			if (blockMarker) {
+				blockMarker->SetActorHiddenInGame(false);
+			}
+		}
+		break;
 	}
+}
+
+ADPLMCharacter::BlockRayCastState ADPLMCharacter::BlockRayCast() {
+	BlockRayCastState state;
+	FVector start = mainCamera->GetComponentLocation()/*+FVector(1.f,-10.f,1.f)*/;
+	FVector forward = mainCamera->GetForwardVector();
+	FVector end = start + (forward * 500.f);
+	if (GetWorld()->LineTraceSingleByChannel(OutHit, start, end, ECC_Visibility, collisionParam)) {
+		if (OutHit.Actor.IsValid() && OutHit.Actor->ActorHasTag("block")) {
+			if (SelectedOtherBodyIndex != OutHit.Item) {
+				SelectedActor = static_cast<ABlock*>(OutHit.Actor.Get());
+				SelectedOtherBodyIndex = OutHit.Item;
+				state = BlockRayCastState::ENTER;
+				FVector pos = SelectedActor->GetInstanceLocation(SelectedOtherBodyIndex);
+				lastBlockSelectedSide = pos+50.f- OutHit.Location;
+				lastBlockSelectedSide.X = FMath::Clamp(lastBlockSelectedSide.X, -1.f, 1.f);
+				lastBlockSelectedSide.Y = FMath::Clamp(lastBlockSelectedSide.Y, -1.f, 1.f);
+				lastBlockSelectedSide.Z = FMath::Clamp(lastBlockSelectedSide.Z, -1.f, 1.f);
+				newBlockPos = pos + (lastBlockSelectedSide * 100.f);
+			//	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, newBlockPos.ToString());
+			}
+		}
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("HIT"));
+	}
+	else {
+		state = BlockRayCastState::MISS;
+	}
+		//DrawDebugLine(GetWorld(), start, end, FColor::Green, false, 0.2, 0, 1);
+	return state;
 }
 
 void ADPLMCharacter::OnRestore()
@@ -270,7 +202,10 @@ void ADPLMCharacter::OnRestore()
 	UWorld* const World = GetWorld();
 	if (World != nullptr) {
 		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
-			static_cast<ABlock*>(SelectedActor)->DeleteInstance(SelectedOtherBodyIndex);
+			FTransform transform;
+			transform.SetRotation(FRotator(0.f, 0.f, 0.f).Quaternion());
+			transform.SetTranslation(newBlockPos);
+			SelectedActor->AddInstance(transform);
 			blockMarker->SetHidden(true);
 			SelectedOtherBodyIndex = -1;
 			SelectedActor = nullptr;
@@ -280,84 +215,7 @@ void ADPLMCharacter::OnRestore()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
 	}
-	if (FireAnimation != nullptr)
-	{
-		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
-		if (AnimInstance != nullptr)
-		{
-			AnimInstance->Montage_Play(FireAnimation, 1.f);
-		}
-	}
 }
-
-void ADPLMCharacter::OnResetVR()
-{
-	UHeadMountedDisplayFunctionLibrary::ResetOrientationAndPosition();
-}
-
-void ADPLMCharacter::BeginTouch(const ETouchIndex::Type FingerIndex, const FVector Location)
-{
-	if (TouchItem.bIsPressed == true)
-	{
-		return;
-	}
-	if ((FingerIndex == TouchItem.FingerIndex) && (TouchItem.bMoved == false))
-	{
-		OnFire();
-	}
-	TouchItem.bIsPressed = true;
-	TouchItem.FingerIndex = FingerIndex;
-	TouchItem.Location = Location;
-	TouchItem.bMoved = false;
-}
-
-void ADPLMCharacter::EndTouch(const ETouchIndex::Type FingerIndex, const FVector Location)
-{
-	if (TouchItem.bIsPressed == false)
-	{
-		return;
-	}
-	TouchItem.bIsPressed = false;
-}
-
-//Commenting this section out to be consistent with FPS BP template.
-//This allows the user to turn without using the right virtual joystick
-
-//void ADPLMCharacter::TouchUpdate(const ETouchIndex::Type FingerIndex, const FVector Location)
-//{
-//	if ((TouchItem.bIsPressed == true) && (TouchItem.FingerIndex == FingerIndex))
-//	{
-//		if (TouchItem.bIsPressed)
-//		{
-//			if (GetWorld() != nullptr)
-//			{
-//				UGameViewportClient* ViewportClient = GetWorld()->GetGameViewport();
-//				if (ViewportClient != nullptr)
-//				{
-//					FVector MoveDelta = Location - TouchItem.Location;
-//					FVector2D ScreenSize;
-//					ViewportClient->GetViewportSize(ScreenSize);
-//					FVector2D ScaledDelta = FVector2D(MoveDelta.X, MoveDelta.Y) / ScreenSize;
-//					if (FMath::Abs(ScaledDelta.X) >= 4.0 / ScreenSize.X)
-//					{
-//						TouchItem.bMoved = true;
-//						float Value = ScaledDelta.X * BaseTurnRate;
-//						AddControllerYawInput(Value);
-//					}
-//					if (FMath::Abs(ScaledDelta.Y) >= 4.0 / ScreenSize.Y)
-//					{
-//						TouchItem.bMoved = true;
-//						float Value = ScaledDelta.Y * BaseTurnRate;
-//						AddControllerPitchInput(Value);
-//					}
-//					TouchItem.Location = Location;
-//				}
-//				TouchItem.Location = Location;
-//			}
-//		}
-//	}
-//}
-
 void ADPLMCharacter::MoveForward(float Value)
 {
 	if (Value != 0.0f)
@@ -379,26 +237,15 @@ void ADPLMCharacter::MoveRight(float Value)
 void ADPLMCharacter::TurnAtRate(float Rate)
 {
 	// calculate delta for this frame from the rate information
-	AddControllerYawInput(Rate * BaseTurnRate * GetWorld()->GetDeltaSeconds());
 }
 
 void ADPLMCharacter::LookUpAtRate(float Rate)
 {
 	// calculate delta for this frame from the rate information
-	AddControllerPitchInput(Rate * BaseLookUpRate * GetWorld()->GetDeltaSeconds());
 }
 
 bool ADPLMCharacter::EnableTouchscreenMovement(class UInputComponent* PlayerInputComponent)
 {
-	if (FPlatformMisc::SupportsTouchInput() || GetDefault<UInputSettings>()->bUseMouseForTouch)
-	{
-		PlayerInputComponent->BindTouch(EInputEvent::IE_Pressed, this, &ADPLMCharacter::BeginTouch);
-		PlayerInputComponent->BindTouch(EInputEvent::IE_Released, this, &ADPLMCharacter::EndTouch);
-
-		//Commenting this out to be more consistent with FPS BP template.
-		//PlayerInputComponent->BindTouch(EInputEvent::IE_Repeat, this, &ADPLMCharacter::TouchUpdate);
-		return true;
-	}
-
+	
 	return false;
 }
