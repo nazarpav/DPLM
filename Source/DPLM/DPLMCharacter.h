@@ -33,6 +33,10 @@ class ADPLMCharacter : public ACharacter
 public:
 	ADPLMCharacter();
 
+	UFUNCTION(BlueprintCallable)
+	void EnterPlayerGame();
+	UFUNCTION(BlueprintCallable)
+	void ExitPlayerGame();
 
 protected:
 	enum class BlockRayCastState {
@@ -46,6 +50,9 @@ protected:
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
 	USoundBase* FireSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
+	bool IsInGame;
 
 	/** AnimMontage to play each time we fire */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)

@@ -28,6 +28,7 @@ ADPLMCharacter::ADPLMCharacter()
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 	FP_MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("MuzzleLocation"));
 	FP_MuzzleLocation->SetRelativeLocation(FVector(0.2f, 48.4f, -10.6f));
+	IsInGame = false;
 }
 void ADPLMCharacter::ConfigureBlockTest() {
 	auto&& res = GetComponentsByTag(UCameraComponent::StaticClass(), FName("mainCamera"));
@@ -40,74 +41,21 @@ void ADPLMCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
+	
+}
+void ADPLMCharacter::EnterPlayerGame() {
 	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
 	blockMarker->SetActorHiddenInGame(true);
 	collisionParam.AddIgnoredActor(GetOwner());
 	collisionParam.AddIgnoredActor(blockMarker);
 	ConfigureBlockTest();
-	FVector pos(0.f, 0.f, 0.f);
-	FRotator rotate(0.f, 0.f, 0.f);
-	FTransform transform;
-	transform.SetRotation(rotate.Quaternion());
-	FActorSpawnParameters spawnInfo;
-	ABlock* block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
-	FVector w_size(100., 100., 30.);
-	FMath::RandInit(65u);
-	for (size_t j = 0; j < w_size.Y; j++)
-	{
-		pos.X = 0.f;
-		pos.Y += 100.f;
-		for (size_t i = 0; i < w_size.X; i++)
-		{
-			pos.Z = 0.f;
-			pos.X += 100.f;
-			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 4.f;
-			size_t height = static_cast<size_t>(w_size.Z * res);
-			height = FMath::Max(static_cast<unsigned int>(height), 1u);
-			for (size_t h = 0; h < height; h++)
-			{
-				transform.SetTranslation(pos);
-				block->AddInstance(transform);
-				pos.Z += 100.f;
-			}
-		}
-	}
-	pos = FVector(0.f, 0.f, 0.f);
-	pos.X = (w_size.X)*100.f;
-
-	block = GetWorld()->SpawnActor<ABlock>(pos, rotate, spawnInfo);
-	FMath::RandInit(66u);
-	for (size_t j = 0; j < w_size.Y; j++)
-	{
-		pos.X = 0.f;
-		pos.Y += 100.f;
-		for (size_t i = 0; i < w_size.X; i++)
-		{
-			pos.Z = 0.f;
-			pos.X += 100.f;
-			float res = (FMath::PerlinNoise2D(FVector2D(w_size.X / (i + 1.f), w_size.Y / (j + 1.f))) + 1.f) / 2.f;
-			size_t height = static_cast<size_t>(w_size.Z * res);
-			height = FMath::Max(static_cast<unsigned int>(height), 1u);
-			for (size_t h = 0; h < height; h++)
-			{
-				transform.SetTranslation(pos);
-				block->AddInstance(transform);
-				pos.Z += 100.f;
-			}
-		}
-	}
-	auto p_spawPos = w_size;
-	p_spawPos.X /= 2.f;
-	p_spawPos.Y /= 2.f;
-	p_spawPos.Z += 2.f;
-	p_spawPos *= 100.f;
-	SetActorLocation(p_spawPos);
+	SetActorLocation(FVector(500.f, 500.f, 7000.f));
 	SelectedOtherBodyIndex = -1;
+	IsInGame = true;
 }
-
-//////////////////////////////////////////////////////////////////////////
-// Input
-
+void ADPLMCharacter::ExitPlayerGame() {
+	IsInGame = false;
+}
 void ADPLMCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	check(PlayerInputComponent);
@@ -147,13 +95,14 @@ void ADPLMCharacter::OnFire()
 void ADPLMCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (IsInGame == false)return;
 	switch (BlockRayCast()) {
 	case BlockRayCastState::MISS:
-		if (blockMarker) {
+		/*if (blockMarker) {
 			blockMarker->SetActorHiddenInGame(true);
 		}
 		SelectedOtherBodyIndex = -1;
-		SelectedActor = nullptr;
+		SelectedActor = nullptr;*/
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("MISS"));
 		break;
 	case BlockRayCastState::ENTER:
@@ -180,12 +129,7 @@ ADPLMCharacter::BlockRayCastState ADPLMCharacter::BlockRayCast() {
 				SelectedOtherBodyIndex = OutHit.Item;
 				state = BlockRayCastState::ENTER;
 				FVector pos = SelectedActor->GetInstanceLocation(SelectedOtherBodyIndex);
-				lastBlockSelectedSide = pos+50.f- OutHit.Location;
-				lastBlockSelectedSide.X = FMath::Clamp(lastBlockSelectedSide.X, -1.f, 1.f);
-				lastBlockSelectedSide.Y = FMath::Clamp(lastBlockSelectedSide.Y, -1.f, 1.f);
-				lastBlockSelectedSide.Z = FMath::Clamp(lastBlockSelectedSide.Z, -1.f, 1.f);
-				newBlockPos = pos + (lastBlockSelectedSide * 100.f);
-			//	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, newBlockPos.ToString());
+				newBlockPos = pos + (OutHit.Normal * 100.f);
 			}
 		}
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("HIT"));
@@ -193,7 +137,7 @@ ADPLMCharacter::BlockRayCastState ADPLMCharacter::BlockRayCast() {
 	else {
 		state = BlockRayCastState::MISS;
 	}
-		//DrawDebugLine(GetWorld(), start, end, FColor::Green, false, 0.2, 0, 1);
+	//DrawDebugLine(GetWorld(), start, end, FColor::Green, false, 0.2, 0, 1);
 	return state;
 }
 
