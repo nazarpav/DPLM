@@ -1,4 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
+#pragma optimize("", off)
 
 #include "DPLMCharacter.h"
 #include "DPLMProjectile.h"
@@ -13,6 +14,7 @@
 #include "DrawDebugHelpers.h"
 
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
+#include <DPLM/WorldManager.h>
 
 DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 
@@ -41,15 +43,19 @@ void ADPLMCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
-	
+
 }
-void ADPLMCharacter::EnterPlayerGame() {
+void ADPLMCharacter::EnterPlayerGame(int GenWSeed, int GenWHeight, int GenWSideSize) {
 	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
 	blockMarker->SetActorHiddenInGame(true);
 	collisionParam.AddIgnoredActor(GetOwner());
 	collisionParam.AddIgnoredActor(blockMarker);
 	ConfigureBlockTest();
-	SetActorLocation(FVector(500.f, 500.f, 7000.f));
+	SetActorLocation(FVector(GenWSideSize*16, GenWSideSize * 16, GenWHeight*100.f));
+	auto && worldM = GetWorld()->SpawnActor<AWorldManager>(FVector(), FRotator());
+	if (worldM) {
+		worldM->CreateWorld(GenWSeed, GenWSideSize, GenWHeight);
+	}
 	SelectedOtherBodyIndex = -1;
 	IsInGame = true;
 }
@@ -190,6 +196,6 @@ void ADPLMCharacter::LookUpAtRate(float Rate)
 
 bool ADPLMCharacter::EnableTouchscreenMovement(class UInputComponent* PlayerInputComponent)
 {
-	
+
 	return false;
 }

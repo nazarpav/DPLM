@@ -34,8 +34,6 @@ public:
 	ADPLMCharacter();
 
 	UFUNCTION(BlueprintCallable)
-	void EnterPlayerGame();
-	UFUNCTION(BlueprintCallable)
 	void ExitPlayerGame();
 
 protected:
@@ -45,6 +43,8 @@ protected:
 		EXIT
 	};
 	virtual void BeginPlay();
+	UFUNCTION(BlueprintCallable)
+	void EnterPlayerGame(int GenWSeed, int GenWHeight, int GenWSideSize);
 	void ConfigureBlockTest();
 	//UBoxComponent* colisionComp;
 public:

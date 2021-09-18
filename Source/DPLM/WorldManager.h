@@ -14,12 +14,11 @@ class DPLM_API AWorldManager : public AActor
 public:	
 	// Sets default values for this actor's properties
 	AWorldManager();
-	AWorldManager(uint32 seed, uint32 worldSize, uint32 worldHeight);
+	void CreateWorld(uint32 seed, uint32 worldSize, uint32 worldHeight);
 protected:
 	UFUNCTION()
 	void CreateChunk(uint32 x, uint32 y, float sideSize, uint32 worldHeight, float worldSize);
 	UFUNCTION()
-	void CreateWorld(uint32 seed, uint32 worldSize, uint32 worldHeight);
 	virtual void BeginPlay() override;
 
 public:	

@@ -1,6 +1,5 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#pragma optimize("", off)
 #include "WorldManager.h"
 #include "Block.h"
 
@@ -40,7 +39,7 @@ void AWorldManager::CreateChunk(uint32 x, uint32 y, float sideSize, uint32 world
 }
 void AWorldManager::CreateWorld(uint32 seed, uint32 worldSize, uint32 worldHeight) {
 	uint32 chunkSize = 32u;
-	uint32 chunkCount = worldSize / chunkSize;
+	uint32 chunkCount = worldSize;
 	FMath::RandInit(seed);
 	for (size_t xx = 0; xx < chunkCount; xx++) {
 		for (size_t yy = 0; yy < chunkCount; yy++) {
@@ -48,12 +47,8 @@ void AWorldManager::CreateWorld(uint32 seed, uint32 worldSize, uint32 worldHeigh
 		}
 	}
 }
-AWorldManager::AWorldManager(uint32 seed, uint32 worldSize, uint32 worldHeight) {
-	PrimaryActorTick.bCanEverTick = false;
-}
 void AWorldManager::BeginPlay(){
 	Super::BeginPlay();
-	CreateWorld(1u, 32u * 8u, 10u);
 }
 
 void AWorldManager::Tick(float DeltaTime)
