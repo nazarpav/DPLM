@@ -20,7 +20,9 @@ protected:
 	void CreateChunk(uint32 x, uint32 y, float sideSize, uint32 worldHeight, float worldSize);
 	UFUNCTION()
 	virtual void BeginPlay() override;
-
-public:	
 	virtual void Tick(float DeltaTime) override;
+	uint32 _worldSize;
+	uint32 _worldHeight;
+	float _time_=0.f;
+	
 };

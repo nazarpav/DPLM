@@ -15,6 +15,7 @@
 
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
 #include <DPLM/WorldManager.h>
+#include <DPLM/BaseEnemy.h>
 
 DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 
@@ -24,6 +25,10 @@ DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 ADPLMCharacter::ADPLMCharacter()
 {
 	GetCapsuleComponent()->InitCapsuleSize(40.f, 96.0f);
+	GetCapsuleComponent()->OnComponentBeginOverlap.AddDynamic(this, &ADPLMCharacter::BeginOverlap);
+	GetCapsuleComponent()->OnComponentEndOverlap.AddDynamic(this, &ADPLMCharacter::OverlapEnd);
+	GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADPLMCharacter::OnHit);
+
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(-39.56f, 1.75f, 64.f)); // Position the camera
@@ -48,10 +53,11 @@ void ADPLMCharacter::BeginPlay()
 void ADPLMCharacter::EnterPlayerGame(int GenWSeed, int GenWHeight, int GenWSideSize) {
 	blockMarker = GetWorld()->SpawnActor<ABlockSelectMarker>(FVector(), FRotator());
 	blockMarker->SetActorHiddenInGame(true);
+	blockMarker->SetActorRotation(FRotator(0.f, 0.f, 0.f));
 	collisionParam.AddIgnoredActor(GetOwner());
 	collisionParam.AddIgnoredActor(blockMarker);
 	ConfigureBlockTest();
-	SetActorLocation(FVector(GenWSideSize*16, GenWSideSize * 16, GenWHeight*100.f));
+	SetActorLocation(FVector(GenWSideSize*1600.f, GenWSideSize * 1600.f, GenWHeight*100.f));
 	auto && worldM = GetWorld()->SpawnActor<AWorldManager>(FVector(), FRotator());
 	if (worldM) {
 		worldM->CreateWorld(GenWSeed, GenWSideSize, GenWHeight);
@@ -84,12 +90,16 @@ void ADPLMCharacter::OnFire()
 {
 	BlockRayCast();
 	UWorld* const World = GetWorld();
-	if (World != nullptr) {
-		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
-			SelectedActor->DeleteInstance(SelectedOtherBodyIndex);
+	if (World != nullptr && SelectedActor) {
+		if (SelectedOtherBodyIndex >= 0 && SelectedActor->ActorHasTag("block")) {
+			static_cast<ABlock*>(SelectedActor)->DeleteInstance(SelectedOtherBodyIndex);
 			blockMarker->SetActorHiddenInGame(true);
+			blockMarker->SetActorRotation(FRotator(0.f, 0.f, 0.f));
 			SelectedOtherBodyIndex = -1;
 			SelectedActor = nullptr;
+		}
+		else  if (SelectedActor->ActorHasTag("enemy")) {
+			SelectedActor->Destroy();
 		}
 	}
 	if (FireSound != nullptr)
@@ -112,11 +122,12 @@ void ADPLMCharacter::Tick(float DeltaTime)
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("MISS"));
 		break;
 	case BlockRayCastState::ENTER:
-		if (SelectedActor) {
+		if (SelectedActor&& SelectedActor->ActorHasTag("block")) {
 			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("ENTER"));
-			blockMarker->SetActorLocation(SelectedActor->GetInstanceLocation(SelectedOtherBodyIndex));
+			blockMarker->SetActorLocation(static_cast<ABlock*>(SelectedActor)->GetInstanceLocation(SelectedOtherBodyIndex));
 			if (blockMarker) {
 				blockMarker->SetActorHiddenInGame(false);
+				blockMarker->SetActorRotation(FRotator(0.f, 0.f, 0.f));
 			}
 		}
 		break;
@@ -131,12 +142,17 @@ ADPLMCharacter::BlockRayCastState ADPLMCharacter::BlockRayCast() {
 	if (GetWorld()->LineTraceSingleByChannel(OutHit, start, end, ECC_Visibility, collisionParam)) {
 		if (OutHit.Actor.IsValid() && OutHit.Actor->ActorHasTag("block")) {
 			if (SelectedOtherBodyIndex != OutHit.Item) {
-				SelectedActor = static_cast<ABlock*>(OutHit.Actor.Get());
+				SelectedActor = OutHit.Actor.Get();
 				SelectedOtherBodyIndex = OutHit.Item;
 				state = BlockRayCastState::ENTER;
-				FVector pos = SelectedActor->GetInstanceLocation(SelectedOtherBodyIndex);
+				FVector pos = static_cast<ABlock*>(SelectedActor)->GetInstanceLocation(SelectedOtherBodyIndex);
 				newBlockPos = pos + (OutHit.Normal * 100.f);
 			}
+		}
+		else if (OutHit.Actor.IsValid() && OutHit.Actor->ActorHasTag("enemy")) {
+				SelectedActor = OutHit.Actor.Get();
+				state = BlockRayCastState::ENTER;
+				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("hittoEnemyRay"));
 		}
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("HIT"));
 	}
@@ -149,13 +165,14 @@ ADPLMCharacter::BlockRayCastState ADPLMCharacter::BlockRayCast() {
 
 void ADPLMCharacter::OnRestore()
 {
-	UWorld* const World = GetWorld();
+	UWorld* World = GetWorld();
+	//UWorld* const World = GetWorld();
 	if (World != nullptr) {
-		if (SelectedActor && SelectedOtherBodyIndex >= 0) {
+		if (SelectedActor && SelectedOtherBodyIndex >= 0 &&SelectedActor->ActorHasTag("block")) {
 			FTransform transform;
 			transform.SetRotation(FRotator(0.f, 0.f, 0.f).Quaternion());
 			transform.SetTranslation(newBlockPos);
-			SelectedActor->AddInstance(transform);
+			static_cast<ABlock*>(SelectedActor)->AddInstance(transform);
 			blockMarker->SetHidden(true);
 			SelectedOtherBodyIndex = -1;
 			SelectedActor = nullptr;
@@ -198,4 +215,28 @@ bool ADPLMCharacter::EnableTouchscreenMovement(class UInputComponent* PlayerInpu
 {
 
 	return false;
+}
+
+void ADPLMCharacter::BeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (OtherActor->ActorHasTag("enemy")) {
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("begin"));
+		TakeDamage(10.f, FDamageEvent(), GetInstigatorController(), this);
+	}
+}
+
+void ADPLMCharacter::OverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (OtherActor->ActorHasTag("enemy")) {
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("end"));
+		TakeDamage(10.f, FDamageEvent(), GetInstigatorController(), this);
+	}
+}
+
+void ADPLMCharacter::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	if (OtherActor->ActorHasTag("enemy")) {
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("hit"));
+		TakeDamage(10.f, FDamageEvent(), GetInstigatorController(), this);
+	}
 }
